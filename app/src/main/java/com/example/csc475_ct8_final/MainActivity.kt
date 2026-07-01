@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
@@ -129,7 +130,7 @@ fun HCookBookApp(factory: RecipeViewModelFactory) {
                 })
             }
             composable("grocery") {
-                GroceryListScreen()
+                GroceryListScreen(viewModel)
             }
             composable(
                 route = "recipeDetail/{recipeId}",
@@ -301,7 +302,9 @@ fun RecipeDetailScreen(recipeId: Int, viewModel: RecipeViewModel, onBack: () -> 
                         }
 
                         when (selectedTab) {
-                            0 -> IngredientsList(recipe.ingredients)
+                            0 -> IngredientsList(recipe.ingredients) {
+                                viewModel.addIngredientsToGrocery(recipe.ingredients)
+                            }
                             1 -> InstructionsView(recipe.instructions)
                         }
                     }
@@ -312,13 +315,23 @@ fun RecipeDetailScreen(recipeId: Int, viewModel: RecipeViewModel, onBack: () -> 
 }
 
 @Composable
-fun IngredientsList(ingredients: List<String>) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        items(ingredients) { ingredient ->
-            Text(text = "• $ingredient", modifier = Modifier.padding(vertical = 4.dp))
+fun IngredientsList(ingredients: List<String>, onAddAllToGrocery: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Button(
+            onClick = onAddAllToGrocery,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text("Add All to Grocery List")
         }
-        if (ingredients.isEmpty()) {
-            item { Text("No ingredients listed.") }
+        LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+            items(ingredients) { ingredient ->
+                Text(text = "• $ingredient", modifier = Modifier.padding(vertical = 4.dp))
+            }
+            if (ingredients.isEmpty()) {
+                item { Text("No ingredients listed.") }
+            }
         }
     }
 }
@@ -331,10 +344,39 @@ fun InstructionsView(instructions: String) {
 }
 
 @Composable
-fun GroceryListScreen() {
+fun GroceryListScreen(viewModel: RecipeViewModel) {
+    val items by viewModel.groceryItems.collectAsState()
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(text = "Grocery List", style = MaterialTheme.typography.headlineMedium)
-        Text(text = "Feature coming soon!", modifier = Modifier.padding(top = 16.dp))
+        
+        if (items.isEmpty()) {
+            Text(text = "Your list is empty.", modifier = Modifier.padding(top = 16.dp))
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
+                items(items) { item ->
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Checkbox(
+                            checked = item.isChecked,
+                            onCheckedChange = { viewModel.updateGroceryItem(item.id, it) }
+                        )
+                        Text(
+                            text = item.name,
+                            modifier = Modifier.weight(1f).padding(start = 8.dp),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        IconButton(onClick = { viewModel.deleteGroceryItem(item.id) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -43,6 +43,9 @@ class RecipeViewModel(private val repository: RecipeRepository) : ViewModel() {
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
+        viewModelScope.launch {
+            repository.ensureSampleData()
+        }
         searchRecipes("popular")
     }
 
@@ -60,8 +63,13 @@ class RecipeViewModel(private val repository: RecipeRepository) : ViewModel() {
 
     fun selectRecipe(id: Int) {
         viewModelScope.launch {
-            repository.fetchRecipeDetails(id).collect { result ->
-                _selectedRecipeResult.value = result
+            val localRecipe = recipes.value.find { it.id == id }
+            if (localRecipe != null) {
+                _selectedRecipeResult.value = NetworkResult.Success(localRecipe)
+            } else {
+                repository.fetchRecipeDetails(id).collect { result ->
+                    _selectedRecipeResult.value = result
+                }
             }
         }
     }
@@ -69,6 +77,28 @@ class RecipeViewModel(private val repository: RecipeRepository) : ViewModel() {
     fun toggleFavorite(recipe: Recipe) {
         viewModelScope.launch {
             repository.toggleFavorite(recipe.id, recipe.isFavorite)
+        }
+    }
+
+    // Grocery List logic
+    val groceryItems: StateFlow<List<GroceryItem>> = repository.getGroceryItems()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    fun addIngredientsToGrocery(ingredients: List<String>) {
+        viewModelScope.launch {
+            repository.addIngredientsToGroceryList(ingredients)
+        }
+    }
+
+    fun updateGroceryItem(id: Int, isChecked: Boolean) {
+        viewModelScope.launch {
+            repository.updateGroceryItem(id, isChecked)
+        }
+    }
+
+    fun deleteGroceryItem(id: Int) {
+        viewModelScope.launch {
+            repository.deleteGroceryItem(id)
         }
     }
 }

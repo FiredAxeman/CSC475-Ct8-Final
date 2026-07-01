@@ -19,4 +19,22 @@ interface RecipeDao {
 
     @Query("DELETE FROM recipes")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM grocery_items")
+    fun getAllGroceryItems(): Flow<List<GroceryItem>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGroceryItem(item: GroceryItem)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGroceryItems(items: List<GroceryItem>)
+
+    @Query("UPDATE grocery_items SET isChecked = :isChecked WHERE id = :id")
+    suspend fun updateGroceryItemStatus(id: Int, isChecked: Boolean)
+
+    @Query("DELETE FROM grocery_items WHERE id = :id")
+    suspend fun deleteGroceryItem(id: Int)
+
+    @Query("DELETE FROM grocery_items")
+    suspend fun deleteAllGroceryItems()
 }

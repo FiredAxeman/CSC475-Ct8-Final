@@ -59,6 +59,13 @@ class RecipeRepository(
         recipeDao.updateFavorite(recipeId, !isFavorite)
     }
 
+    suspend fun ensureSampleData() {
+        val existing = recipeDao.getAllRecipes().first()
+        if (existing.isEmpty()) {
+            recipeDao.insertRecipes(SampleData.recipes.map { it.toEntity() })
+        }
+    }
+
     suspend fun syncFavorites() {
         val favorites = recipeDao.getAllRecipes().first().filter { it.isFavorite }
         favorites.forEach { entity ->
@@ -72,5 +79,20 @@ class RecipeRepository(
                 // Log error or handle retry
             }
         }
+    }
+
+    fun getGroceryItems(): Flow<List<GroceryItem>> = recipeDao.getAllGroceryItems()
+
+    suspend fun addIngredientsToGroceryList(ingredients: List<String>) {
+        val items = ingredients.map { GroceryItem(name = it) }
+        recipeDao.insertGroceryItems(items)
+    }
+
+    suspend fun updateGroceryItem(id: Int, isChecked: Boolean) {
+        recipeDao.updateGroceryItemStatus(id, isChecked)
+    }
+
+    suspend fun deleteGroceryItem(id: Int) {
+        recipeDao.deleteGroceryItem(id)
     }
 }
