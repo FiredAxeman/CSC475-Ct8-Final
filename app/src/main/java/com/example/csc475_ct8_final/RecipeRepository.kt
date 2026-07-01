@@ -1,49 +1,76 @@
 package com.example.csc475_ct8_final
 
-object RecipeRepository {
-    private val recipes = mutableListOf(
-        Recipe(
-            1,
-            "Spaghetti Carbonara",
-            "Classic Italian pasta dish.",
-            listOf("Spaghetti", "Eggs", "Pecorino Romano", "Guanciale", "Black Pepper"),
-            "1. Boil pasta. 2. Fry guanciale. 3. Mix eggs and cheese. 4. Combine all with pasta water."
-        ),
-        Recipe(
-            2,
-            "Chicken Curry",
-            "Flavorful and spicy curry.",
-            listOf("Chicken", "Onion", "Garlic", "Ginger", "Curry Powder", "Coconut Milk"),
-            "1. Sauté aromatics. 2. Add chicken and brown. 3. Add spices and coconut milk. 4. Simmer until cooked."
-        ),
-        Recipe(
-            3,
-            "Greek Salad",
-            "Fresh and healthy salad.",
-            listOf("Tomatoes", "Cucumber", "Red Onion", "Feta Cheese", "Olives", "Olive Oil"),
-            "1. Chop vegetables. 2. Combine in a bowl. 3. Add feta and olives. 4. Drizzle with olive oil."
-        ),
-        Recipe(
-            4,
-            "Beef Tacos",
-            "Quick and easy tacos.",
-            listOf("Ground Beef", "Taco Shells", "Lettuce", "Cheese", "Salsa", "Sour Cream"),
-            "1. Brown beef with taco seasoning. 2. Warm taco shells. 3. Assemble tacos with toppings."
-        ),
-        Recipe(
-            5,
-            "Pancakes",
-            "Fluffy breakfast pancakes.",
-            listOf("Flour", "Milk", "Egg", "Baking Powder", "Sugar", "Butter"),
-            "1. Whisk wet ingredients. 2. Mix in dry ingredients. 3. Cook on a griddle until bubbly. 4. Flip and cook until golden."
-        )
-    )
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 
-    fun getRecipes(): List<Recipe> = recipes
+class RecipeRepository(
+    private val apiService: RecipeApiService,
+    private val recipeDao: RecipeDao
+) {
+    fun getLocalRecipes(): Flow<List<Recipe>> {
+        return recipeDao.getAllRecipes().map { entities ->
+            entities.map { it.toDomainModel() }
+        }
+    }
 
-    fun toggleFavorite(recipeId: Int) {
-        recipes.find { it.id == recipeId }?.let {
-            it.isFavorite = !it.isFavorite
+    fun fetchRecipes(query: String): Flow<NetworkResult<List<Recipe>>> = flow {
+        emit(NetworkResult.Loading())
+        
+        val localRecipes = recipeDao.getAllRecipes().first()
+        if (localRecipes.isNotEmpty() && query.isBlank()) {
+            emit(NetworkResult.Success(localRecipes.map { it.toDomainModel() }))
+        }
+
+        try {
+            val response = apiService.searchRecipes(query = query)
+            if (response.isSuccessful && response.body() != null) {
+                val recipes = response.body()!!.results.map { it.toDomainModel() }
+                recipeDao.insertRecipes(recipes.map { it.toEntity() })
+                emit(NetworkResult.Success(recipes))
+            } else {
+                emit(NetworkResult.Error(response.message()))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Error("Network failure. Details: ${e.localizedMessage}"))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    fun fetchRecipeDetails(id: Int): Flow<NetworkResult<Recipe>> = flow {
+        emit(NetworkResult.Loading())
+        try {
+            val response = apiService.getRecipeInformation(id)
+            if (response.isSuccessful && response.body() != null) {
+                val recipe = response.body()!!.toDomainModel()
+                recipeDao.insertRecipes(listOf(recipe.toEntity()))
+                emit(NetworkResult.Success(recipe))
+            } else {
+                emit(NetworkResult.Error(response.message()))
+            }
+        } catch (e: Exception) {
+            emit(NetworkResult.Error("Failed to fetch details: ${e.localizedMessage}"))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    suspend fun toggleFavorite(recipeId: Int, isFavorite: Boolean) {
+        recipeDao.updateFavorite(recipeId, !isFavorite)
+    }
+
+    suspend fun syncFavorites() {
+        val favorites = recipeDao.getAllRecipes().first().filter { it.isFavorite }
+        favorites.forEach { entity ->
+            try {
+                val response = apiService.getRecipeInformation(entity.id)
+                if (response.isSuccessful && response.body() != null) {
+                    val updatedRecipe = response.body()!!.toDomainModel().copy(isFavorite = true)
+                    recipeDao.insertRecipes(listOf(updatedRecipe.toEntity()))
+                }
+            } catch (e: Exception) {
+                // Log error or handle retry
+            }
         }
     }
 }
